@@ -73,7 +73,7 @@ describe('default task guidance', () => {
       /Put the verification in\s+that task's checkbox description/
     );
     expect(tasks!.instruction).toMatch(
-      /Use a separate verification task only\s+when it checks broader integration or system behavior that spans\s+multiple implementation tasks/
+      /Use a separate verification task only\s+when\s+it\s+checks\s+broader\s+integration\s+or\s+system\s+behavior\s+that\s+spans\s+multiple\s+implementation\s+tasks/
     );
 
     const example = tasks!.instruction.match(/```\s*([\s\S]*?)```/)?.[1];

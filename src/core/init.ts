@@ -15,6 +15,7 @@ import {
   classifyOpenSpecDir,
   MAX_CONTEXT_SIZE,
   readProjectConfig,
+  resolveArtifactsDir,
   storePointerProblem,
 } from './project-config.js';
 import { findRepoPlanningRootSync } from './planning-home.js';
@@ -28,6 +29,7 @@ import {
 import { PALETTE } from './styles/palette.js';
 import { isInteractive } from '../utils/interactive.js';
 import { serializeConfig } from './config-prompts.js';
+import { resolveSchema, type SchemaYaml } from './artifact-graph/index.js';
 import {
   generateCommands,
   CommandAdapterRegistry,
@@ -855,18 +857,43 @@ export class InitCommand {
   // DIRECTORY STRUCTURE
   // ═══════════════════════════════════════════════════════════
 
+  /**
+   * Resolves the artifacts root (the directory holding changes/ and specs/)
+   * for the project being initialized. The config root (openspec/) never
+   * moves; only the artifacts root is configurable.
+   *
+   * Extend mode keeps the project's established layout (init never migrates
+   * changes/ or specs/); fresh projects adopt the schema's default
+   * artifacts_dir (falling back to the legacy openspec/ layout).
+   */
+  private resolveInitArtifactsDir(projectPath: string, extendMode: boolean): string {
+    if (extendMode) {
+      return readProjectConfig(projectPath)?.artifacts_dir ?? 'openspec';
+    }
+    try {
+      return resolveSchema(DEFAULT_SCHEMA, projectPath).artifacts_dir ?? 'openspec';
+    } catch {
+      return 'openspec';
+    }
+  }
+
   private async createDirectoryStructure(openspecPath: string, extendMode: boolean): Promise<void> {
+    const projectPath = path.dirname(openspecPath);
+    const artifactsRoot = path.join(projectPath, this.resolveInitArtifactsDir(projectPath, extendMode));
+
+    // openspecPath is the config root; the artifacts root (which may differ)
+    // holds specs/, changes/, and changes/archive/.
+    const directories = [
+      openspecPath,
+      path.join(artifactsRoot, 'specs'),
+      path.join(artifactsRoot, 'changes'),
+      path.join(artifactsRoot, 'changes', 'archive'),
+    ];
+
     if (extendMode) {
       // In extend mode, just ensure directories exist without spinner
-      const directories = [
-        openspecPath,
-        path.join(openspecPath, 'specs'),
-        path.join(openspecPath, 'changes'),
-        path.join(openspecPath, 'changes', 'archive'),
-      ];
-
       for (const dir of directories) {
-        FileSystemUtils.assertProjectArtifactPath(path.dirname(openspecPath), dir);
+        FileSystemUtils.assertProjectArtifactPath(projectPath, dir);
         await FileSystemUtils.createDirectory(dir);
       }
       return;
@@ -874,15 +901,8 @@ export class InitCommand {
 
     const spinner = this.startSpinner('Creating OpenSpec structure...');
 
-    const directories = [
-      openspecPath,
-      path.join(openspecPath, 'specs'),
-      path.join(openspecPath, 'changes'),
-      path.join(openspecPath, 'changes', 'archive'),
-    ];
-
     for (const dir of directories) {
-      FileSystemUtils.assertProjectArtifactPath(path.dirname(openspecPath), dir);
+      FileSystemUtils.assertProjectArtifactPath(projectPath, dir);
       await FileSystemUtils.createDirectory(dir);
     }
 
@@ -1114,13 +1134,41 @@ export class InitCommand {
       return 'exists';
     }
 
+    const projectPath = path.dirname(openspecPath);
+
+    // The schema's init-time defaults: the artifacts layout plus the starter
+    // context/rules baked into the new config. A resolution failure must not
+    // block init - fall back to the legacy single-root layout.
+    let schemaDefaults: SchemaYaml | undefined;
+    try {
+      schemaDefaults = resolveSchema(DEFAULT_SCHEMA, projectPath);
+    } catch {
+      schemaDefaults = undefined;
+    }
+
+    // Same artifacts root createDirectoryStructure just created, so the config
+    // always points at the directories init made.
+    const artifactsDir = this.resolveInitArtifactsDir(projectPath, extendMode);
+
+    // Starter context: the schema's default with any --language directive
+    // appended. Still bounded by the project context limit.
+    const schemaContext = schemaDefaults?.config?.context;
+    const languageContext = this.languageContext();
+    const context = [schemaContext, languageContext].filter(Boolean).join('\n') || undefined;
+    if (context !== undefined && Buffer.byteLength(context, 'utf8') > MAX_CONTEXT_SIZE) {
+      throw new Error(
+        `The --language option is too long for OpenSpec's ${MAX_CONTEXT_SIZE / 1024}KB project context limit.`
+      );
+    }
 
     try {
       const yamlContent = serializeConfig({
         schema: DEFAULT_SCHEMA,
-        context: this.languageContext(),
+        artifacts_dir: artifactsDir,
+        context,
+        rules: schemaDefaults?.config?.rules,
       });
-      FileSystemUtils.assertProjectArtifactPath(path.dirname(openspecPath), configPath);
+      FileSystemUtils.assertProjectArtifactPath(projectPath, configPath);
       await FileSystemUtils.writeFile(configPath, yamlContent);
       return 'created';
     } catch (error) {
@@ -1300,6 +1348,12 @@ export class InitCommand {
     // Config status
     if (configStatus === 'created') {
       console.log(`Config: openspec/config.yaml (schema: ${DEFAULT_SCHEMA})`);
+      // Name the artifacts root when it differs from the config root, so the
+      // split layout (config in openspec/, artifacts elsewhere) is visible.
+      const artifactsDir = resolveArtifactsDir(projectPath);
+      if (artifactsDir !== 'openspec') {
+        console.log(`Artifacts: ${artifactsDir}/ (changes, specs)`);
+      }
     } else if (configStatus === 'exists') {
       // Show actual filename (config.yaml or config.yml)
       const configYaml = path.join(projectPath, OPENSPEC_DIR_NAME, 'config.yaml');

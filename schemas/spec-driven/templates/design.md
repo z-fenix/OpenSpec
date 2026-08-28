@@ -17,3 +17,8 @@
 ## Risks / Trade-offs
 
 <!-- Known risks and trade-offs -->
+
+## Files and Tests
+
+<!-- Exact test file paths the implementation will add or change, and the
+     per-file test strategy (unit, integration, e2e) -->

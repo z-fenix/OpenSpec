@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { getSchemaDir, listSchemas } from '../../core/artifact-graph/index.js';
 import type { ReferenceIndexEntry } from '../../core/references.js';
 import { isRootSelectionError } from '../../core/root-selection.js';
+import { resolveArtifactsDir } from '../../core/project-config.js';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -135,7 +136,7 @@ export function getStatusIndicator(status: 'done' | 'skipped' | 'ready' | 'block
  */
 export async function getAvailableChanges(
   projectRoot: string,
-  changesDir = path.join(projectRoot, 'openspec', 'changes')
+  changesDir = path.join(projectRoot, resolveArtifactsDir(projectRoot), 'changes')
 ): Promise<string[]> {
   const changesPath = changesDir;
   try {
@@ -184,7 +185,7 @@ function validateChangeLookupName(changeName: string): string | undefined {
 export async function validateChangeExists(
   changeName: string | undefined,
   projectRoot: string,
-  changesDir = path.join(projectRoot, 'openspec', 'changes'),
+  changesDir = path.join(projectRoot, resolveArtifactsDir(projectRoot), 'changes'),
   hints: { newChangeHint?: string } = {}
 ): Promise<string> {
   // Hints must stay pasteable: callers with a selected store pass a

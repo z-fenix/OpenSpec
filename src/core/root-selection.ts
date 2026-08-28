@@ -36,7 +36,7 @@ import {
 import { getStoreRootForBackend } from './store/registry.js';
 import { inspectOpenSpecRoot } from './openspec-root.js';
 import { findRepoPlanningRootSync, type PlanningHome } from './planning-home.js';
-import { classifyOpenSpecDir, storePointerProblem } from './project-config.js';
+import { classifyOpenSpecDir, resolveArtifactsDir, storePointerProblem } from './project-config.js';
 import { getGlobalConfig } from './global-config.js';
 import { FileSystemUtils } from '../utils/file-system.js';
 
@@ -119,11 +119,12 @@ function makeRoot(
   source: OpenSpecRootSource,
   storeId?: string
 ): ResolvedOpenSpecRoot {
+  const artifactsDir = resolveArtifactsDir(rootPath);
   return {
     path: rootPath,
-    changesDir: path.join(rootPath, 'openspec', 'changes'),
-    specsDir: path.join(rootPath, 'openspec', 'specs'),
-    archiveDir: path.join(rootPath, 'openspec', 'changes', 'archive'),
+    changesDir: path.join(rootPath, artifactsDir, 'changes'),
+    specsDir: path.join(rootPath, artifactsDir, 'specs'),
+    archiveDir: path.join(rootPath, artifactsDir, 'changes', 'archive'),
     defaultSchema: 'spec-driven',
     source,
     ...(storeId ? { storeId } : {}),

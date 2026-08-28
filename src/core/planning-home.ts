@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { FileSystemUtils } from '../utils/file-system.js';
+import { resolveArtifactsDir } from './project-config.js';
 
 export type PlanningHomeKind = 'repo';
 
@@ -66,7 +67,7 @@ function repoPlanningHome(repoRoot: string): PlanningHome {
   return {
     kind: 'repo',
     root: repoRoot,
-    changesDir: path.join(repoRoot, 'openspec', 'changes'),
+    changesDir: path.join(repoRoot, resolveArtifactsDir(repoRoot), 'changes'),
     defaultSchema: REPO_DEFAULT_SCHEMA,
   };
 }

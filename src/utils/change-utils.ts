@@ -2,7 +2,7 @@ import path from 'path';
 import { FileSystemUtils } from './file-system.js';
 import { writeChangeMetadata, validateSchemaName } from './change-metadata.js';
 import { formatLocalDate } from './date.js';
-import { readProjectConfig } from '../core/project-config.js';
+import { readProjectConfig, resolveArtifactsDir } from '../core/project-config.js';
 import { isKebabId } from '../core/id.js';
 import { resolveSchema } from '../core/artifact-graph/resolver.js';
 import { isSpecsArtifactPath } from '../core/artifact-graph/outputs.js';
@@ -160,7 +160,8 @@ export async function createChange(
   validateSchemaName(schemaName, projectRoot);
 
   // Build the change directory path
-  const changeDir = path.join(options.changesDir ?? path.join(projectRoot, 'openspec', 'changes'), name);
+  const artifactsRoot = resolveArtifactsDir(projectRoot);
+  const changeDir = path.join(options.changesDir ?? path.join(projectRoot, artifactsRoot, 'changes'), name);
 
   // Check if change already exists
   if (await FileSystemUtils.directoryExists(changeDir)) {
@@ -175,15 +176,15 @@ export async function createChange(
   // Creating a change may scaffold or complete the root itself (an
   // implicit root, or a config-only/incomplete clone). Never leave a
   // half-root behind that doctor immediately calls unhealthy: ensure
-  // specs/ and changes/archive/ exist, and write a config only when
-  // none exists. The config records the PROJECT default schema, never
-  // a one-change --schema override.
+  // specs/ and changes/archive/ exist under the artifacts root, and write
+  // a config only when none exists. The config records the PROJECT default
+  // schema, never a one-change --schema override.
   const openspecDir = path.join(projectRoot, 'openspec');
 
   // Create the directory (including parent directories if needed)
   await FileSystemUtils.createDirectory(changeDir);
-  await FileSystemUtils.createDirectory(path.join(openspecDir, 'specs'));
-  await FileSystemUtils.createDirectory(path.join(openspecDir, 'changes', 'archive'));
+  await FileSystemUtils.createDirectory(path.join(projectRoot, artifactsRoot, 'specs'));
+  await FileSystemUtils.createDirectory(path.join(projectRoot, artifactsRoot, 'changes', 'archive'));
   const configPath = path.join(openspecDir, 'config.yaml');
   const configYmlPath = path.join(openspecDir, 'config.yml');
   if (

@@ -17,7 +17,7 @@ import {
   type ActionContext,
   type PlanningHomeSummary,
 } from '../change-status-policy.js';
-import { readProjectConfig, validateConfigRules, type ProjectConfig } from '../project-config.js';
+import { readProjectConfig, resolveArtifactsDir, validateConfigRules, type ProjectConfig } from '../project-config.js';
 import type { ReferenceIndexEntry } from '../references.js';
 import type { PlanningHome } from '../planning-home.js';
 import type { ChangeMetadata } from '../change-metadata/index.js';
@@ -269,7 +269,7 @@ export function loadChangeContext(
   options: LoadChangeContextOptions = {}
 ): ChangeContext {
   const changeDir = FileSystemUtils.canonicalizeExistingPath(
-    options.changeDir ?? path.join(projectRoot, 'openspec', 'changes', changeName)
+    options.changeDir ?? path.join(projectRoot, resolveArtifactsDir(projectRoot), 'changes', changeName)
   );
 
   const metadata = readChangeMetadata(changeDir, projectRoot) ?? undefined;

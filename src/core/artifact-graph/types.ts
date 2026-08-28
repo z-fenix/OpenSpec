@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { z } from 'zod';
 
-function relativePathSchema(fieldName: string) {
+export function relativePathSchema(fieldName: string) {
   return z
     .string()
     .min(1, { error: `${fieldName} is required` })
@@ -41,6 +41,16 @@ export const ApplyPhaseSchema = z.object({
   instruction: z.string().optional(),
 });
 
+// Default project configuration a schema provides for `openspec init` scaffolding.
+// Only read at init time to bake the project's initial config.yaml; it has no
+// runtime effect (runtime resolution uses config.yaml's artifacts_dir ?? 'openspec').
+export const SchemaConfigSchema = z.object({
+  // Project context shown to AI when creating artifacts
+  context: z.string().optional(),
+  // Per-artifact rules, keyed by artifact ID
+  rules: z.record(z.string(), z.array(z.string())).optional(),
+});
+
 // Full schema YAML structure
 export const SchemaYamlSchema = z.object({
   name: z.string().min(1, { error: 'Schema name is required' }),
@@ -49,11 +59,17 @@ export const SchemaYamlSchema = z.object({
   artifacts: z.array(ArtifactSchema).min(1, { error: 'At least one artifact required' }),
   // Optional apply phase configuration (for schema-aware apply instructions)
   apply: ApplyPhaseSchema.optional(),
+  // Default artifacts directory baked into init-created config.yaml
+  // (relative to the project root; where changes/ and specs/ live).
+  artifacts_dir: relativePathSchema('artifacts_dir field').optional(),
+  // Default project config (context + rules) scaffolded by `openspec init`
+  config: SchemaConfigSchema.optional(),
 });
 
 // Derived TypeScript types
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type ApplyPhase = z.infer<typeof ApplyPhaseSchema>;
+export type SchemaConfig = z.infer<typeof SchemaConfigSchema>;
 export type SchemaYaml = z.infer<typeof SchemaYamlSchema>;
 
 // Runtime state types (not Zod - internal only)

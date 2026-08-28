@@ -69,6 +69,7 @@ Three fields shape what the agent receives. Each field's exact contract (types, 
 | `context` | Instructions the agent always receives | Everything: every artifact, `apply`, `archive` |
 | `rules` | Extra instructions for one artifact | Only that artifact's creation |
 | `operations` | Guidance for how a workflow step is carried out | Only `apply` and `archive` |
+| `artifacts_dir` | The directory (relative to the project root) holding `changes/` and `specs/` | Nothing — read at command dispatch to locate artifacts |
 
 config.yaml's other fields (`schema`, `store`, `references`) select which schema and which OpenSpec root a project uses. The contract page covers them.
 
@@ -118,6 +119,28 @@ operations:
 ```
 
 During apply, the agent lints as it completes tasks. During archive, it closes with a summary.
+
+### artifacts_dir
+
+`artifacts_dir` relocates the artifacts — `changes/`, `changes/archive/`, and `specs/` — out from under `openspec/`:
+
+```yaml
+artifacts_dir: docs/openspec
+```
+
+The value is a path relative to the project root; absolute paths and `..` segments are rejected. `openspec/` keeps `config.yaml` and any project-local `schemas/`; commands read `artifacts_dir` to find `changes/` and `specs/` elsewhere.
+
+With the value above, the layout is:
+
+```text
+openspec/
+  config.yaml
+docs/openspec/
+  changes/
+  specs/
+```
+
+Omitting the key keeps the legacy single-root layout (everything under `openspec/`). `openspec init` writes `artifacts_dir: docs/openspec` for new projects from the [spec-driven schema](../reference/schemas/spec-driven/index.md) default; existing projects are never migrated.
 
 ## When config.yaml isn't enough
 

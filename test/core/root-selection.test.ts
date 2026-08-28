@@ -217,6 +217,28 @@ describe('resolveOpenSpecRoot', () => {
     expect(root.path).toBe(repoRoot);
   });
 
+  it('resolves a split-layout root with artifacts under a configured artifacts_dir', async () => {
+    const repoRoot = mkdir('split-repo');
+    // Config root: openspec/ holds config.yaml naming the artifacts dir.
+    fs.mkdirSync(path.join(repoRoot, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, 'openspec', 'config.yaml'),
+      'schema: spec-driven\nartifacts_dir: docs/openspec\n'
+    );
+    // Artifacts root: docs/openspec holds specs/ and changes/.
+    fs.mkdirSync(path.join(repoRoot, 'docs', 'openspec', 'specs'), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, 'docs', 'openspec', 'changes', 'archive'), { recursive: true });
+    const nested = mkdir('split-repo/src/deep');
+
+    const root = await resolveOpenSpecRoot({ startPath: nested, globalDataDir });
+
+    expect(root.source).toBe('nearest');
+    expect(root.path).toBe(repoRoot);
+    expect(root.changesDir).toBe(path.join(repoRoot, 'docs', 'openspec', 'changes'));
+    expect(root.specsDir).toBe(path.join(repoRoot, 'docs', 'openspec', 'specs'));
+    expect(root.archiveDir).toBe(path.join(repoRoot, 'docs', 'openspec', 'changes', 'archive'));
+  });
+
   it('ignores leftover workspace view state when a nearest root exists', async () => {
     const workspaceDir = mkdir('workspace');
     fs.mkdirSync(path.join(workspaceDir, '.openspec-workspace'), { recursive: true });

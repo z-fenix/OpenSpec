@@ -6,6 +6,7 @@ import {
   loadOperationInputs,
   OPERATION_IDS,
   readProjectConfig,
+  resolveArtifactsDir,
   validateConfigRules,
   suggestSchemas,
 } from '../../src/core/project-config.js';
@@ -635,6 +636,53 @@ rules:
         expect(consoleWarnSpy).toHaveBeenCalledWith(
           expect.stringContaining("Invalid 'references' field")
         );
+      });
+    });
+
+    describe('artifacts_dir parsing and resolveArtifactsDir', () => {
+      function writeConfig(body: string): void {
+        const configDir = path.join(tempDir, 'openspec');
+        fs.mkdirSync(configDir, { recursive: true });
+        fs.writeFileSync(path.join(configDir, 'config.yaml'), body);
+      }
+
+      it('parses a valid artifacts_dir into the config', () => {
+        writeConfig('schema: spec-driven\nartifacts_dir: docs/openspec\n');
+
+        const config = readProjectConfig(tempDir);
+
+        expect(config?.artifacts_dir).toBe('docs/openspec');
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
+      });
+
+      it('drops an invalid artifacts_dir with a warning', () => {
+        writeConfig('schema: spec-driven\nartifacts_dir: ../outside\n');
+
+        const config = readProjectConfig(tempDir);
+
+        expect(config?.artifacts_dir).toBeUndefined();
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('artifacts_dir')
+        );
+      });
+
+      it('resolveArtifactsDir defaults to openspec when unset or config absent', () => {
+        // No config file at all.
+        expect(resolveArtifactsDir(tempDir)).toBe('openspec');
+
+        // Config without artifacts_dir.
+        writeConfig('schema: spec-driven\n');
+        expect(resolveArtifactsDir(tempDir)).toBe('openspec');
+      });
+
+      it('resolveArtifactsDir returns the configured directory', () => {
+        writeConfig('schema: spec-driven\nartifacts_dir: docs/openspec\n');
+        expect(resolveArtifactsDir(tempDir)).toBe('docs/openspec');
+      });
+
+      it('resolveArtifactsDir falls back to openspec for an invalid artifacts_dir', () => {
+        writeConfig('schema: spec-driven\nartifacts_dir: /absolute/path\n');
+        expect(resolveArtifactsDir(tempDir)).toBe('openspec');
       });
     });
 

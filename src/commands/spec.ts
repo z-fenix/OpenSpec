@@ -9,8 +9,18 @@ import { isInteractive } from '../utils/interactive.js';
 import { getSpecIds } from '../utils/item-discovery.js';
 import { discoverSpecFiles } from '../utils/spec-discovery.js';
 import { FileSystemUtils } from '../utils/file-system.js';
+import { resolveArtifactsDir } from '../core/project-config.js';
 
-const SPECS_DIR = 'openspec/specs';
+// Main specs directory, resolved against the project's artifacts root
+// (config.yaml's artifacts_dir, defaulting to openspec/).
+function resolveSpecsDir(root: string = process.cwd()): string {
+  return join(root, resolveArtifactsDir(root), 'specs');
+}
+
+// Forward-slash relative display path for error messages.
+function specsDisplayDir(root: string = process.cwd()): string {
+  return `${resolveArtifactsDir(root)}/specs`;
+}
 
 function assertSpecPath(specsDir: string, specPath: string): void {
   const relativePath = path.relative(path.resolve(specsDir), path.resolve(specPath));
@@ -98,7 +108,7 @@ export class SpecCommand {
   // deprecated noun-form commands stay cwd-based.
   constructor(rootPath?: string) {
     this.rootPath = rootPath;
-    this.specsDir = rootPath ? join(rootPath, 'openspec', 'specs') : SPECS_DIR;
+    this.specsDir = resolveSpecsDir(rootPath ?? process.cwd());
   }
 
   async show(specId?: string, options: ShowOptions = {}): Promise<void> {
@@ -121,7 +131,7 @@ export class SpecCommand {
     if (!existsSync(specPath)) {
       // Root-aware callers get the absolute path; the cwd-based noun form
       // keeps its historical forward-slash relative message on all platforms.
-      const displayPath = this.rootPath ? specPath : `openspec/specs/${specId}/spec.md`;
+      const displayPath = this.rootPath ? specPath : `${specsDisplayDir()}/${specId}/spec.md`;
       throw new Error(`Spec '${specId}' not found at ${displayPath}`);
     }
 
@@ -182,17 +192,18 @@ export function registerSpecCommand(rootProgram: typeof program) {
     .option('--long', 'Show id and title with counts')
     .action(async (options: { json?: boolean; long?: boolean }) => {
       try {
-        if (!existsSync(SPECS_DIR)) {
+        const specsDir = resolveSpecsDir();
+        if (!existsSync(specsDir)) {
           console.log('No items found');
           return;
         }
 
-        const discovered = await discoverSpecFiles(SPECS_DIR);
+        const discovered = await discoverSpecFiles(specsDir);
         const specs = discovered
           .map(({ id, specFile }) => {
             try {
-              assertSpecPath(SPECS_DIR, specFile);
-              const spec = parseSpecFromFile(SPECS_DIR, specFile, id);
+              assertSpecPath(specsDir, specFile);
+              const spec = parseSpecFromFile(specsDir, specFile, id);
 
               return {
                 id,
@@ -252,15 +263,15 @@ export function registerSpecCommand(rootProgram: typeof program) {
           }
         }
 
-        const specPath = join(SPECS_DIR, specId, 'spec.md');
-        assertSpecPath(SPECS_DIR, specPath);
-        
+        const specPath = join(resolveSpecsDir(), specId, 'spec.md');
+        assertSpecPath(resolveSpecsDir(), specPath);
+
         if (!existsSync(specPath)) {
-          throw new Error(`Spec '${specId}' not found at openspec/specs/${specId}/spec.md`);
+          throw new Error(`Spec '${specId}' not found at ${specsDisplayDir()}/${specId}/spec.md`);
         }
 
         const validator = new Validator(options.strict);
-        assertSpecPath(SPECS_DIR, specPath);
+        assertSpecPath(resolveSpecsDir(), specPath);
         const report = await validator.validateSpec(specPath);
 
         if (options.json) {

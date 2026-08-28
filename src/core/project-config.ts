@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
+import { relativePathSchema } from './artifact-graph/types.js';
 
 export const OPERATION_IDS = ['apply', 'archive'] as const;
 export type OperationId = (typeof OPERATION_IDS)[number];
@@ -73,6 +74,15 @@ export const ProjectConfigSchema = z.object({
     .string()
     .optional()
     .describe('Store id used as the OpenSpec root when no local planning shape exists'),
+
+  // Optional: directory (relative to the project root) where change artifacts
+  // (changes/, changes/archive/, specs/) live. Defaults to 'openspec'. The
+  // config root (config.yaml, schemas/) always stays under openspec/.
+  artifacts_dir: relativePathSchema('artifacts_dir field')
+    .optional()
+    .describe(
+      'Directory (relative to the project root) holding changes/ and specs/; defaults to openspec'
+    ),
 
   // Optional: GitHub Copilot integration preferences. `cloudAgent` is the
   // opt-in for generating the Copilot cloud coding-agent files (a GitHub
@@ -376,6 +386,21 @@ export function readProjectConfig(projectRoot: string): ProjectConfig | null {
       }
     }
 
+    // Parse the artifacts directory field: a safe relative path, or dropped
+    // with a warning (falling back to the legacy 'openspec' layout).
+    if (raw.artifacts_dir !== undefined) {
+      const artifactsDirResult = relativePathSchema('artifacts_dir field').safeParse(
+        raw.artifacts_dir
+      );
+      if (artifactsDirResult.success) {
+        config.artifacts_dir = artifactsDirResult.data;
+      } else {
+        console.warn(
+          `Warning: ignoring invalid artifacts_dir: field in ${configPathForWarnings(projectRoot)} (must be a relative path inside the project, no '..' or absolute paths).`
+        );
+      }
+    }
+
     // Parse githubCopilot preferences (only cloudAgent is recognized today).
     if (raw.githubCopilot !== undefined) {
       if (
@@ -406,6 +431,45 @@ export function readProjectConfig(projectRoot: string): ProjectConfig | null {
 
 function configPathForWarnings(projectRoot: string): string {
   return resolveConfigFilePath(projectRoot) ?? path.join(projectRoot, 'openspec', 'config.yaml');
+}
+
+/**
+ * Resolve the directory (relative to the project root) where change artifacts
+ * (changes/, changes/archive/, specs/) live. Reads `artifacts_dir` from
+ * openspec/config.yaml; falls back to the legacy single-root 'openspec' layout
+ * when the key is absent (or the config is missing/unparseable).
+ *
+ * The config root (config.yaml, schemas/) always stays under openspec/ — only
+ * the artifacts root is configurable.
+ *
+ * @param projectRoot - The root directory of the project (where `openspec/` lives)
+ * @returns The relative artifacts directory, e.g. 'openspec' or 'docs/openspec'
+ */
+export function resolveArtifactsDir(projectRoot: string): string {
+  const configPath = resolveConfigFilePath(projectRoot);
+  if (configPath === null) {
+    return 'openspec';
+  }
+
+  let raw: unknown;
+  try {
+    raw = parseYaml(readFileSync(configPath, 'utf-8'));
+  } catch {
+    return 'openspec'; // Unparseable config: readProjectConfig reports that.
+  }
+  if (!raw || typeof raw !== 'object') {
+    return 'openspec';
+  }
+
+  // This resolver runs at many points in a single command (root selection,
+  // discovery, instruction loading). It must be side-effect free: extract only
+  // the artifacts_dir field and stay silent about it and every other field, or
+  // a malformed config would re-warn on every path resolution. Reporting
+  // problems is readProjectConfig's job, which commands call once.
+  const result = relativePathSchema('artifacts_dir field').safeParse(
+    (raw as Record<string, unknown>).artifacts_dir
+  );
+  return result.success ? result.data : 'openspec';
 }
 
 /**
@@ -577,7 +641,7 @@ export function storePointerProblem(reason: 'unparseable' | 'non_string'): strin
 }
 
 export interface OpenSpecDirClassification {
-  /** True when openspec/specs or openspec/changes exists as a directory. */
+  /** True when openspec/specs or openspec/changes exists as a directory (or their artifacts-dir equivalents). */
   hasPlanningShape: boolean;
   pointer: StorePointerRead;
 }
@@ -586,12 +650,23 @@ export interface OpenSpecDirClassification {
  * One classification for "real root vs config-only pointer dir", shared
  * by root resolution and the init pointer guard so they can never
  * disagree (slice 3.2).
+ *
+ * Planning shape may live either under the legacy single root (openspec/
+ * specs|changes) or under a configured artifacts_dir (e.g. docs/openspec/
+ * specs|changes) — both count as a real root.
  */
 export function classifyOpenSpecDir(projectRoot: string): OpenSpecDirClassification {
   const openspecDir = path.join(projectRoot, 'openspec');
+  // Use the silent resolver (not readProjectConfig): classification runs per
+  // candidate during root resolution, and a malformed config must not re-warn
+  // here on top of the single read a command performs.
+  const artifactsDir = resolveArtifactsDir(projectRoot);
+  const artifactsRoot = path.join(projectRoot, artifactsDir);
   const hasPlanningShape =
     isDirectorySync(path.join(openspecDir, 'specs')) ||
-    isDirectorySync(path.join(openspecDir, 'changes'));
+    isDirectorySync(path.join(openspecDir, 'changes')) ||
+    isDirectorySync(path.join(artifactsRoot, 'specs')) ||
+    isDirectorySync(path.join(artifactsRoot, 'changes'));
   return { hasPlanningShape, pointer: readStorePointer(projectRoot) };
 }
 

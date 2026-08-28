@@ -2,8 +2,11 @@
 export {
   ArtifactSchema,
   SchemaYamlSchema,
+  SchemaConfigSchema,
+  relativePathSchema,
   type Artifact,
   type SchemaYaml,
+  type SchemaConfig,
   type CompletedSet,
   type BlockedArtifacts,
 } from './types.js';

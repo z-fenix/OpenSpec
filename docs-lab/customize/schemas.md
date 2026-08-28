@@ -62,6 +62,8 @@ artifacts:
       - design
 ```
 
+Two schema.yaml fields are **init-time only**: `artifacts_dir` and `config`. They don't shape a change at runtime. `openspec init` reads them once, when creating a brand-new project, to decide where artifacts go and what starter context and rules to write into `openspec/config.yaml`. Existing projects keep whatever their config.yaml already holds. [`schema.yaml`](../reference/schemas/schema-yaml.md) covers both fields.
+
 The built-in schemas ship inside the openspec package, so you never edit them in place. You get your own copy by forking.
 
 ## Creating your own custom schema

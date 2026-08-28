@@ -414,4 +414,40 @@ describe('boolean marker reasons', () => {
     expect(marker.invalidReason).toContain("unknown schema 'ghost?[31m-schema'");
     expect(marker.invalidReason).not.toMatch(/[\u0000-\u001f\u007f]/);
   });
+
+  it('resolves the project root for a change under a multi-segment artifacts_dir', async () => {
+    // Split layout: the config root openspec/ (holding a project-local schema)
+    // and the artifacts root docs/openspec/changes/<name>. The fixed ../../..
+    // derivation would stop at docs/ and miss the custom schema; the walk-up
+    // must find the real project root so the marker's schema resolves.
+    const changeDir = path.join(tempDir, 'docs', 'openspec', 'changes', 'c');
+    await fs.mkdir(changeDir, { recursive: true });
+    const schemaDir = path.join(tempDir, 'openspec', 'schemas', 'custom-flow');
+    await fs.mkdir(schemaDir, { recursive: true });
+    await fs.writeFile(
+      path.join(schemaDir, 'schema.yaml'),
+      [
+        'name: custom-flow',
+        'version: 1',
+        'description: project-local schema',
+        'artifacts:',
+        '  - id: specs',
+        '    generates: "specs/**/*.md"',
+        '    description: delta specs',
+        '    template: specs.md',
+        '    requires: []',
+      ].join('\n'),
+      'utf-8'
+    );
+    await fs.writeFile(
+      path.join(changeDir, '.openspec.yaml'),
+      'schema: custom-flow\nretire_capabilities: true\n',
+      'utf-8'
+    );
+
+    const marker = readRetireCapabilitiesMarker(changeDir);
+
+    expect(marker.invalidReason).toBeUndefined();
+    expect(marker.declared).toBe(true);
+  });
 });

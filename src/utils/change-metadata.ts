@@ -8,6 +8,37 @@ import { readProjectConfig, type ProjectConfig } from '../core/project-config.js
 export const METADATA_FILENAME = '.openspec.yaml';
 
 /**
+ * Derive the project root for a change directory. changeDir is
+ * `<root>/<artifacts_dir>/changes/<name>`; with a multi-segment artifacts_dir
+ * (e.g. docs/openspec) the fixed `../../..` derivation resolves too shallow.
+ * Walk up to the project root: the directory whose `openspec/` is the CONFIG
+ * root (it holds config.yaml and/or project-local schemas/). That distinguishes
+ * it from a configurable artifacts root - which may itself be named `openspec`
+ * (docs/openspec) but holds changes/ and specs/, never config or schemas.
+ * Falls back to the legacy `../../..` derivation for roots still under
+ * construction (an openspec/ with only changes/ and specs/).
+ */
+function findProjectRootForChange(changeDir: string): string {
+  let current = path.resolve(changeDir);
+  while (true) {
+    const openspecDir = path.join(current, 'openspec');
+    if (
+      fs.existsSync(path.join(openspecDir, 'config.yaml')) ||
+      fs.existsSync(path.join(openspecDir, 'config.yml')) ||
+      fs.existsSync(path.join(openspecDir, 'schemas'))
+    ) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  return path.resolve(changeDir, '../../..');
+}
+
+/**
  * Error thrown when change metadata validation fails.
  */
 export class ChangeMetadataError extends Error {
@@ -171,8 +202,11 @@ export function resolveSchemaForChange(
   projectRootOverride?: string,
   options: ResolveSchemaForChangeOptions = {}
 ): string {
-  // Derive project root from changeDir (changeDir is typically projectRoot/openspec/changes/change-name)
-  const projectRoot = projectRootOverride ?? path.resolve(changeDir, '../../..');
+  // Derive project root from changeDir (changeDir is typically
+  // projectRoot/openspec/changes/change-name). A multi-segment artifacts_dir
+  // (e.g. docs/openspec) would make ../../.. resolve too shallow, so walk up
+  // to the config root when the caller does not supply one.
+  const projectRoot = projectRootOverride ?? findProjectRootForChange(changeDir);
 
   // 1. Explicit override wins
   if (explicitSchema) {
@@ -235,8 +269,8 @@ export type SkipSpecsMarker = MetadataMarker;
  * Missing metadata means "not declared"; a marker that cannot be honored
  * yields invalidReason so callers can say why.
  */
-export function readSkipSpecsMarker(changeDir: string): MetadataMarker {
-  return readBooleanMarker(changeDir, 'skip_specs');
+export function readSkipSpecsMarker(changeDir: string, projectRootOverride?: string): MetadataMarker {
+  return readBooleanMarker(changeDir, 'skip_specs', projectRootOverride);
 }
 
 /**
@@ -249,8 +283,8 @@ export function readSkipSpecsMarker(changeDir: string): MetadataMarker {
  * (#1302). Declared rather than inferred because the delete is recoverable only
  * from git, so it is the author's call.
  */
-export function readRetireCapabilitiesMarker(changeDir: string): MetadataMarker {
-  return readBooleanMarker(changeDir, 'retire_capabilities');
+export function readRetireCapabilitiesMarker(changeDir: string, projectRootOverride?: string): MetadataMarker {
+  return readBooleanMarker(changeDir, 'retire_capabilities', projectRootOverride);
 }
 
 /**
@@ -273,7 +307,8 @@ function unhonorable(reason: string): MetadataMarker {
 
 function readBooleanMarker(
   changeDir: string,
-  key: 'skip_specs' | 'retire_capabilities'
+  key: 'skip_specs' | 'retire_capabilities',
+  projectRootOverride?: string
 ): MetadataMarker {
   let raw: string;
   try {
@@ -314,7 +349,10 @@ function readBooleanMarker(
     // resolveSchema alone would normalize and accept); resolveSchema then
     // proves the schema actually parses. Any failure fails closed.
     try {
-      const projectRoot = path.resolve(changeDir, '../../..');
+      // The project root, not a derivation from changeDir: a multi-segment
+      // artifacts_dir (e.g. docs/openspec) would make ../../.. resolve too
+      // shallow. Prefer the caller's root; otherwise walk up to the config root.
+      const projectRoot = projectRootOverride ?? findProjectRootForChange(changeDir);
       if (!listSchemas(projectRoot).includes(result.data.schema)) {
         return unhonorable(`schema: unknown schema '${result.data.schema}'`);
       }

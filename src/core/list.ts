@@ -4,6 +4,7 @@ import { getTaskProgressForChange, formatTaskStatus } from '../utils/task-progre
 import { readFileSync, type Dirent } from 'fs';
 import { MarkdownParser } from './parsers/markdown-parser.js';
 import type { RootOutput } from './root-selection.js';
+import { resolveArtifactsDir } from './project-config.js';
 import { discoverSpecFiles } from '../utils/spec-discovery.js';
 
 interface ChangeInfo {
@@ -99,7 +100,7 @@ export class ListCommand {
     const { sort = 'recent', json = false, root } = options;
 
     if (mode === 'changes') {
-      const changesDir = path.join(targetPath, 'openspec', 'changes');
+      const changesDir = path.join(targetPath, resolveArtifactsDir(targetPath), 'changes');
 
       // Get all directories in changes (excluding archive)
       const entries = await readChangeDirectoryEntries(changesDir);
@@ -165,7 +166,7 @@ export class ListCommand {
     }
 
     // specs mode
-    const specsDir = path.join(targetPath, 'openspec', 'specs');
+    const specsDir = path.join(targetPath, resolveArtifactsDir(targetPath), 'specs');
     try {
       await fs.access(specsDir);
     } catch {

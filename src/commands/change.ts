@@ -12,6 +12,7 @@ import { getActiveChangeIds } from '../utils/item-discovery.js';
 import { getTaskProgressForChange } from '../utils/task-progress.js';
 import { FileSystemUtils } from '../utils/file-system.js';
 import { discoverSpecFiles } from '../utils/spec-discovery.js';
+import { resolveArtifactsDir } from '../core/project-config.js';
 import {
   foldRequirementName,
   parseDeltaSpec,
@@ -69,13 +70,15 @@ export class ChangeCommand {
   }
 
   private getChangesPath(): string {
-    return path.join(this.rootPath ?? process.cwd(), 'openspec', 'changes');
+    const root = this.rootPath ?? process.cwd();
+    return path.join(root, resolveArtifactsDir(root), 'changes');
   }
 
   // Main specs resolve against the same root as changes, so `--diff` reads the
   // selected store's specs rather than whatever sits under the cwd.
   private getSpecsPath(): string {
-    return path.join(this.rootPath ?? process.cwd(), 'openspec', 'specs');
+    const root = this.rootPath ?? process.cwd();
+    return path.join(root, resolveArtifactsDir(root), 'specs');
   }
 
   /**
@@ -411,7 +414,7 @@ export class ChangeCommand {
    * - JSON: array of { id, title, deltaCount, taskStatus }, sorted by id
    */
   async list(options?: { json?: boolean; long?: boolean }): Promise<void> {
-    const changesPath = path.join(process.cwd(), 'openspec', 'changes');
+    const changesPath = path.join(process.cwd(), resolveArtifactsDir(process.cwd()), 'changes');
     
     // Same directory-based resolution as `openspec list`, the command this
     // deprecated alias points users at. Every output path below already
@@ -496,7 +499,7 @@ export class ChangeCommand {
   }
 
   async validate(changeName?: string, options?: { strict?: boolean; json?: boolean; noInteractive?: boolean }): Promise<void> {
-    const changesPath = path.join(process.cwd(), 'openspec', 'changes');
+    const changesPath = path.join(process.cwd(), resolveArtifactsDir(process.cwd()), 'changes');
     
     if (!changeName) {
       const canPrompt = isInteractive(options);
@@ -535,7 +538,9 @@ export class ChangeCommand {
       // Derived from changesPath so the main specs come from the same root the
       // change itself was resolved against.
       mainSpecsDir: path.join(path.dirname(changesPath), 'specs'),
-      projectRoot: path.dirname(path.dirname(changesPath)),
+      // The project root, not a derivation from changeDir: a multi-segment
+      // artifacts_dir (e.g. docs/openspec) would make ../.. resolve too shallow.
+      projectRoot: process.cwd(),
     });
     
     if (options?.json) {

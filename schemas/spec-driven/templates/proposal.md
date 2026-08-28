@@ -4,7 +4,9 @@
 
 ## What Changes
 
-<!-- Describe what will change. Be specific about new capabilities, modifications, or removals. -->
+<!-- Describe what will change. Be specific about new capabilities, modifications, or removals.
+     Frame each change as a testable behavior (WHEN/THEN) so the specs phase can turn it
+     into scenarios. Do not describe implementation details here. -->
 
 ## Capabilities
 

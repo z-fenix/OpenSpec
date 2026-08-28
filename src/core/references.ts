@@ -22,7 +22,7 @@ import { getStoreRootForBackend } from './store/registry.js';
 import { inspectRegisteredStore, type ResolvedOpenSpecRoot } from './root-selection.js';
 import { getSpecIds } from '../utils/item-discovery.js';
 import { FileSystemUtils } from '../utils/file-system.js';
-import { MAX_CONTEXT_SIZE, type DeclarationEntry } from './project-config.js';
+import { MAX_CONTEXT_SIZE, resolveArtifactsDir, type DeclarationEntry } from './project-config.js';
 
 export interface ReferenceSpecEntry {
   id: string;
@@ -175,7 +175,7 @@ async function collectSpecEntries(referencedRoot: string): Promise<ReferenceSpec
       let summary = '';
       try {
         const content = await fs.readFile(
-          path.join(referencedRoot, 'openspec', 'specs', specId, 'spec.md'),
+          path.join(referencedRoot, resolveArtifactsDir(referencedRoot), 'specs', specId, 'spec.md'),
           'utf-8'
         );
         summary = sanitizeInline(extractFirstPurposeLine(content));

@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { resolveArtifactsDir } from '../core/project-config.js';
 import { discoverSpecFiles } from './spec-discovery.js';
 
 /**
@@ -14,7 +15,7 @@ import { discoverSpecFiles } from './spec-discovery.js';
  * all (#1161).
  */
 export async function getActiveChangeIds(root: string = process.cwd()): Promise<string[]> {
-  const changesPath = path.join(root, 'openspec', 'changes');
+  const changesPath = path.join(root, resolveArtifactsDir(root), 'changes');
   try {
     const entries = await fs.readdir(changesPath, { withFileTypes: true });
     return entries
@@ -27,7 +28,7 @@ export async function getActiveChangeIds(root: string = process.cwd()): Promise<
 }
 
 export async function getSpecIds(root: string = process.cwd()): Promise<string[]> {
-  const specsPath = path.join(root, 'openspec', 'specs');
+  const specsPath = path.join(root, resolveArtifactsDir(root), 'specs');
   const discovered = await discoverSpecFiles(specsPath);
   return discovered.map((spec) => spec.id);
 }
@@ -41,7 +42,7 @@ export async function getSpecIds(root: string = process.cwd()): Promise<string[]
  * gating on it hid those entries from shell completion.
  */
 export async function getArchivedChangeIds(root: string = process.cwd()): Promise<string[]> {
-  const archivePath = path.join(root, 'openspec', 'changes', 'archive');
+  const archivePath = path.join(root, resolveArtifactsDir(root), 'changes', 'archive');
   try {
     const entries = await fs.readdir(archivePath, { withFileTypes: true });
     return entries

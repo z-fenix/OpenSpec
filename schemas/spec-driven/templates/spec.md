@@ -7,5 +7,6 @@
 <!-- requirement text -->
 
 #### Scenario: <!-- scenario name -->
+<!-- Optional precondition: - **GIVEN** <setup>. Omit when no setup is needed. -->
 - **WHEN** <!-- condition -->
 - **THEN** <!-- expected outcome -->

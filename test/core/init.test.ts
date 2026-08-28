@@ -61,11 +61,19 @@ describe('InitCommand', () => {
 
       await initCommand.execute(testDir);
 
+      // Config root (unchanged): openspec/ holds config.yaml and schemas/.
       const openspecPath = path.join(testDir, 'openspec');
       expect(await directoryExists(openspecPath)).toBe(true);
-      expect(await directoryExists(path.join(openspecPath, 'specs'))).toBe(true);
-      expect(await directoryExists(path.join(openspecPath, 'changes'))).toBe(true);
-      expect(await directoryExists(path.join(openspecPath, 'changes', 'archive'))).toBe(true);
+
+      // Artifacts root (default: docs/openspec) holds changes/ and specs/.
+      const artifactsPath = path.join(testDir, 'docs', 'openspec');
+      expect(await directoryExists(path.join(artifactsPath, 'specs'))).toBe(true);
+      expect(await directoryExists(path.join(artifactsPath, 'changes'))).toBe(true);
+      expect(await directoryExists(path.join(artifactsPath, 'changes', 'archive'))).toBe(true);
+
+      // The artifacts no longer live directly under the config root.
+      expect(await directoryExists(path.join(openspecPath, 'specs'))).toBe(false);
+      expect(await directoryExists(path.join(openspecPath, 'changes'))).toBe(false);
     });
 
     it('should create config.yaml with default schema', async () => {
@@ -78,6 +86,37 @@ describe('InitCommand', () => {
 
       const content = await fs.readFile(configPath, 'utf-8');
       expect(content).toContain('schema: spec-driven');
+    });
+
+    it('should bake the schema artifacts_dir and starter context/rules into a fresh config', async () => {
+      const initCommand = new InitCommand({ tools: 'none', force: true });
+
+      await initCommand.execute(testDir);
+
+      const config = readProjectConfig(testDir);
+      expect(config?.schema).toBe('spec-driven');
+      expect(config?.artifacts_dir).toBe('docs/openspec');
+      expect(config?.context).toContain('Test command:');
+      expect(config?.rules?.proposal).toContain(
+        'List every testable behavior using WHEN/THEN format'
+      );
+      expect(config?.rules?.tasks).toBeDefined();
+    });
+
+    it('should keep an existing single-root layout when extending (no migration)', async () => {
+      // Pre-existing legacy project: config and artifacts both under openspec/.
+      const openspecPath = path.join(testDir, 'openspec');
+      await fs.mkdir(path.join(openspecPath, 'changes', 'archive'), { recursive: true });
+      await fs.mkdir(path.join(openspecPath, 'specs'), { recursive: true });
+      await fs.writeFile(path.join(openspecPath, 'config.yaml'), 'schema: spec-driven\n', 'utf-8');
+
+      const initCommand = new InitCommand({ tools: 'none', force: true });
+      await initCommand.execute(testDir);
+
+      // Extend mode must not create the docs/openspec split or rewrite config.
+      expect(await directoryExists(path.join(testDir, 'docs', 'openspec'))).toBe(false);
+      expect(await directoryExists(path.join(openspecPath, 'specs'))).toBe(true);
+      expect(readProjectConfig(testDir)?.artifacts_dir).toBeUndefined();
     });
 
     it('should add the requested artifact language to a new config', async () => {
@@ -133,18 +172,27 @@ describe('InitCommand', () => {
       expect(await fs.readFile(configPath, 'utf-8')).toBe(originalConfig);
     });
 
-    it('should accept language context at the exact project context size limit', async () => {
-      const language = 'x'.repeat(25_542);
-      const initCommand = new InitCommand({ tools: 'none', force: true, language });
+    it('should append the language directive to the schema default context', async () => {
+      const initCommand = new InitCommand({ tools: 'none', force: true, language: 'Portuguese (pt-BR)' });
 
       await initCommand.execute(testDir);
 
       const context = readProjectConfig(testDir)?.context;
-      expect(context).toBeDefined();
-      expect(Buffer.byteLength(context!, 'utf8')).toBe(MAX_CONTEXT_SIZE);
-      expect(() => new InitCommand({ tools: 'none', language: `${language}x` })).toThrow(
-        'too long',
-      );
+      // The schema's default context is baked in...
+      expect(context).toContain('Tech stack:');
+      // ...with the language directive appended after it.
+      expect(context).toContain('Language: Portuguese (pt-BR)');
+      expect(context).toContain('All artifacts must be written in Portuguese (pt-BR).');
+    });
+
+    it('should reject a language that overflows once the schema default context is prepended', async () => {
+      // This language fills the 50KB context budget on its own, so the
+      // constructor accepts it; merged with the schema default context it
+      // exceeds the cap, and init rejects it when writing the config.
+      const language = 'x'.repeat(25_542);
+      const initCommand = new InitCommand({ tools: 'none', force: true, language });
+
+      await expect(initCommand.execute(testDir)).rejects.toThrow('too long');
     });
 
     it('should reject oversized and unsafe language values before writing files', async () => {

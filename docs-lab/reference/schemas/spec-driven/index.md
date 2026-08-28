@@ -2,7 +2,7 @@
 
 > The default workflow's artifacts: their order, their formats, and the change folder they produce.
 
-`spec-driven` is OpenSpec's built-in default schema. [schema.yaml](../schema-yaml.md) defines the fields it sets.
+`spec-driven` is OpenSpec's built-in default schema. [schema.yaml](../schema-yaml.md) defines the fields it sets. When `openspec init` creates a new project it reads this schema's `artifacts_dir` and `config` defaults and bakes them into `openspec/config.yaml` ([Defaults `openspec init` writes](#defaults-openspec-init-writes)).
 
 ## Artifacts
 
@@ -30,12 +30,36 @@ Two artifacts can be skipped:
 - **`design`**: when none of [its conditions](#designmd) apply, the agent leaves it out and drafts `tasks` anyway.
 - **`specs`**: set [`skip_specs: true`](../../configuration/change-metadata.md#skip_specs) in the change's `.openspec.yaml`.
 
-## Example change folder
+## Where changes live
 
-A change named `add-user-auth`, with every artifact drafted:
+`openspec init` creates new projects with a split layout. The config root stays
+`openspec/`; the artifacts move to `docs/openspec/`:
 
 ```text
-openspec/changes/add-user-auth/
+openspec/
+  config.yaml          config root (unchanged)
+  schemas/
+docs/openspec/         artifacts root (the default for new projects)
+  changes/
+  specs/
+```
+
+`openspec/` keeps `config.yaml` and any project-local `schemas/`. `docs/openspec/`
+holds `changes/` (with `changes/archive/`) and `specs/`. Existing projects created
+before this layout keep everything under `openspec/` — nothing migrates.
+
+The split is configurable. `artifacts_dir` in `config.yaml` relocates the artifacts
+root to any project-root-relative directory; `openspec init` writes
+`artifacts_dir: docs/openspec` from this schema's default. [Project
+configuration](../../../customize/project-config.md) covers the key.
+
+## Example change folder
+
+A change named `add-user-auth`, with every artifact drafted, in a project using the
+default split layout:
+
+```text
+docs/openspec/changes/add-user-auth/
 ├── .openspec.yaml      change metadata, written when the change is created
 ├── proposal.md
 ├── specs/
@@ -44,6 +68,42 @@ openspec/changes/add-user-auth/
 ├── design.md
 └── tasks.md
 ```
+
+## Defaults `openspec init` writes
+
+When `openspec init` creates a brand-new project, it reads two fields from this
+schema's schema.yaml and bakes them into `openspec/config.yaml`:
+
+```yaml
+artifacts_dir: docs/openspec
+config:
+  context: |
+    Tech stack: <list your primary languages, frameworks, and runtime>
+    Test framework: <name the test runner and assertion library>
+    Test command: <the exact command that runs the test suite>
+    Project description: <one or two sentences on what this project does>
+    Key entry points: <files or modules that define the system's shape>
+    All production code must have corresponding tests.
+  rules:
+    proposal:
+      - List every testable behavior using WHEN/THEN format
+      - Do not describe implementation details in the proposal
+    specs:
+      - Write each scenario in GIVEN/WHEN/THEN format
+      - Every scenario must be independently testable
+    design:
+      - Specify the exact test file paths for the implementation
+      - Describe the per-file test strategy (unit, integration, e2e)
+    tasks:
+      - Use checkbox format "- [ ]" for every task
+      - Each task must state how to verify completion (a test, command, or observable behavior)
+```
+
+The `context` reaches every artifact the agent drafts; each `rules` list attaches to
+the artifact id it's keyed under. Both are starters, meant to be edited to fit the
+project — the context placeholders are there to be filled in. They are init-time
+defaults only: existing projects keep whatever their `config.yaml` already holds,
+and commands resolve `artifacts_dir` from `config.yaml`, never from the schema.
 
 ## proposal.md
 
@@ -60,7 +120,9 @@ The template the agent receives as the output format ([templates/proposal.md](ht
 
 ## What Changes
 
-<!-- Describe what will change. Be specific about new capabilities, modifications, or removals. -->
+<!-- Describe what will change. Be specific about new capabilities, modifications, or removals.
+     Frame each change as a testable behavior (WHEN/THEN) so the specs phase can turn it
+     into scenarios. Do not describe implementation details here. -->
 
 ## Capabilities
 
@@ -94,7 +156,7 @@ Create the proposal document that establishes WHY this change is needed.
 
 Sections:
 - **Why**: 1-2 sentences on the problem or opportunity. What problem does this solve? Why now?
-- **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**.
+- **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**. Frame each change as a testable behavior (WHEN/THEN) so the specs phase can turn it into scenarios. Do not describe implementation details here.
 - **Capabilities**: Identify which specs will be created or modified:
   - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<capability-path>/spec.md`. Use kebab-case for path segments you introduce (e.g., `user-auth` or `identity/user-auth`) and follow the project's existing spec organization.
   - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Only include if spec-level behavior changes (not just implementation details). Each needs a delta spec file. Use the exact existing path under `openspec/specs/`. Leave empty if no requirement changes.
@@ -136,6 +198,7 @@ The template the agent receives as the output format ([templates/spec.md](https:
 <!-- requirement text -->
 
 #### Scenario: <!-- scenario name -->
+<!-- Optional precondition: - **GIVEN** <setup>. Omit when no setup is needed. -->
 - **WHEN** <!-- condition -->
 - **THEN** <!-- expected outcome -->
 ```
@@ -184,7 +247,10 @@ Delta operations (use ## headers):
 Format requirements:
 - Each requirement: `### Requirement: <name>` followed by description
 - Use SHALL/MUST for normative requirements (avoid should/may)
-- Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+- Each scenario: `#### Scenario: <name>` with WHEN/THEN format; when a
+  precondition clarifies the setup, open the scenario with an optional
+  `- **GIVEN**` line before WHEN/THEN. Every scenario must be
+  independently testable.
 - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
 - Every requirement MUST have at least one scenario.
 
@@ -196,10 +262,16 @@ left with a `TBD ... Update Purpose after archive` placeholder to fill in
 by hand. Do NOT add `## Purpose` to a delta for an existing capability -
 that spec already has one and the delta's is ignored. To change an
 existing capability's Purpose - including a leftover `TBD` placeholder -
-edit `openspec/specs/<capability-path>/spec.md` directly.
+edit `<planningHome.root>/openspec/specs/<capability-path>/spec.md`
+directly. `planningHome.root` comes from the `openspec instructions ...
+--json` response. Always use it rather than a repo-relative path: it
+resolves to the store whenever the change lives in one - whether that
+came from `--store`, a project `store:` pointer, or a global default
+store - and to the current repository otherwise. Do not try to work out
+which case applies; the field already has.
 
 MODIFIED requirements workflow:
-1. Locate the existing requirement in openspec/specs/<capability-path>/spec.md
+1. Locate the existing requirement in `<planningHome.root>/openspec/specs/<capability-path>/spec.md` (the same store-aware root as above)
 2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
 3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
 4. Ensure header text matches exactly (whitespace-insensitive)
@@ -260,6 +332,11 @@ The template the agent receives as the output format ([templates/design.md](http
 ## Risks / Trade-offs
 
 <!-- Known risks and trade-offs -->
+
+## Files and Tests
+
+<!-- Exact test file paths the implementation will add or change, and the
+     per-file test strategy (unit, integration, e2e) -->
 ```
 
 ### Instructions
@@ -281,6 +358,7 @@ Sections:
 - **Decisions**: Key technical choices with rationale (why X over Y?). Include alternatives considered for each decision.
 - **Risks / Trade-offs**: Known limitations, things that could go wrong. Format: [Risk] → Mitigation
 - **Migration Plan**: Steps to deploy, rollback strategy (if applicable)
+- **Files and Tests**: The exact test file paths the implementation will add or change, and the per-file test strategy (unit, integration, e2e).
 - **Open Questions**: Unknowns that can safely be answered later without
   changing the specs, the approach, or the task breakdown. Omit if none.
 
@@ -305,6 +383,11 @@ Breaks the implementation into checkable tasks. [apply](#apply) tracks progress 
 The template the agent receives as the output format ([templates/tasks.md](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/templates/tasks.md)):
 
 ```md
+<!-- Each task must state how to verify completion (a test, command, or observable
+     behavior). Put the verification in the task's checkbox description; where the
+     project's context names a `Test command`, reference it. Use a separate
+     verification task only for broader integration or system behavior. -->
+
 ## 1. <!-- Task Group Name -->
 
 - [ ] 1.1 <!-- Task description -->
@@ -335,22 +418,27 @@ Guidelines:
 - Each task MUST be a checkbox: `- [ ] X.Y Task description`
 - Tasks should be small enough to complete in one session
 - Order tasks by dependency (what must be done first?)
+- Each task MUST state how to verify completion (a test, command,
+  observable behavior, or delivered artifact). Put the verification in
+  that task's checkbox description. Where the project's context names a
+  `Test command`, reference it (for example, "verify `<test command>`
+  passes"). Use a separate verification task only when it checks broader
+  integration or system behavior that spans multiple implementation tasks.
 
 Example:
 ```
 ## 1. Setup
 
-- [ ] 1.1 Create new module structure
-- [ ] 1.2 Add dependencies to package.json
+- [ ] 1.1 Create new module structure and verify expected files are present
+- [ ] 1.2 Add dependencies to package.json and verify package installation succeeds
 
 ## 2. Core Implementation
 
-- [ ] 2.1 Implement data export function
-- [ ] 2.2 Add CSV formatting utilities
+- [ ] 2.1 Implement data export function and verify the export test passes
+- [ ] 2.2 Add CSV formatting utilities and verify unit tests cover quoting and delimiters
 ```
 
 Reference specs for what needs to be built, design for how to build it.
-Each task should be verifiable - you know when it's done.
 ````
 
 ## Apply
@@ -389,6 +477,17 @@ The complete [schema.yaml](https://github.com/Fission-AI/OpenSpec/blob/main/sche
 name: spec-driven
 version: 1
 description: Default OpenSpec workflow - proposal → specs → design → tasks
+
+# Init-time defaults only. `openspec init` bakes these into a new project's
+# openspec/config.yaml; they are NOT read at runtime (runtime resolves
+# artifacts_dir from config.yaml, defaulting to 'openspec').
+artifacts_dir: docs/openspec
+config:
+  # Starter context and per-artifact rules, shown in full under
+  # "Defaults `openspec init` writes" above.
+  context: <starter project context>
+  rules: <proposal, specs, design, tasks>
+
 artifacts:
   - id: proposal
     generates: proposal.md

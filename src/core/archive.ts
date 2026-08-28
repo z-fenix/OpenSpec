@@ -790,6 +790,19 @@ async function fingerprintPortableContent(filePath: string): Promise<string> {
   }
 }
 
+/**
+ * The spec path shown in archive output. A store-selected root needs the
+ * absolute (cross-root) target; a normal root shows the project-root-relative
+ * path so a configurable artifacts_dir (e.g. docs/openspec) displays where the
+ * spec actually lives. Forward slashes keep it consistent across platforms.
+ */
+function specDisplayPath(root: ResolvedOpenSpecRoot, target: string): string {
+  if (isStoreSelectedRoot(root)) {
+    return target;
+  }
+  return path.relative(root.path, target).split(path.sep).join('/');
+}
+
 /** Fail closed if the metadata authorizing a retirement leaves its snapshot. */
 async function assertRetirementAuthorization(
   changeDir: string,
@@ -1237,7 +1250,7 @@ export class ArchiveCommand {
       // proposal warnings — a gap that predates the marker and is left
       // unchanged here.)
       if (!hasDeltaSpecs) {
-        const marker = readSkipSpecsMarker(changeDir);
+        const marker = readSkipSpecsMarker(changeDir, root.path);
         if (marker.invalidReason) {
           hasDeltaSpecs = true;
         } else if (marker.declared) {
@@ -1387,7 +1400,7 @@ export class ArchiveCommand {
     // retire a capability at all. An unhonorable marker counts as undeclared,
     // exactly as skip_specs treats one, so metadata the rest of the CLI rejects
     // can never authorise a deletion.
-    const retirementMarker = readRetireCapabilitiesMarker(changeDir);
+    const retirementMarker = readRetireCapabilitiesMarker(changeDir, root.path);
     const retirementDeclared = retirementMarker.declared;
     const retirementAuthorizationFingerprint = retirementDeclared
       ? await fingerprintPortableContent(path.join(changeDir, METADATA_FILENAME))
@@ -1516,7 +1529,7 @@ export class ArchiveCommand {
           // delete a requirement added while the prompt was waiting.
           if (prepareError === undefined) {
             try {
-              const currentRetirementMarker = readRetireCapabilitiesMarker(changeDir);
+              const currentRetirementMarker = readRetireCapabilitiesMarker(changeDir, root.path);
               if (
                 currentRetirementMarker.declared !== retirementMarker.declared ||
                 currentRetirementMarker.invalidReason !== retirementMarker.invalidReason
@@ -1751,8 +1764,9 @@ export class ArchiveCommand {
                 }
                 mutationAttempts.add(p.update.target);
               },
-              // Cross-root paths must be absolute when a store is selected.
-              ...(isStoreSelectedRoot(root) ? { displayPath: p.update.target } : {}),
+              // Cross-root paths must be absolute when a store is selected;
+              // otherwise show the project-root-relative path (artifacts_dir aware).
+              displayPath: specDisplayPath(root, p.update.target),
             });
             wroteAny = true;
             writeTotals.added += added;
@@ -1805,7 +1819,7 @@ export class ArchiveCommand {
                     );
                   }
                 },
-                ...(isStoreSelectedRoot(root) ? { displayPath: p.update.target } : {}),
+                displayPath: specDisplayPath(root, p.update.target),
               }
             );
             if (!retired) continue;

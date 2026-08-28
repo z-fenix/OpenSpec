@@ -38,6 +38,8 @@ The directory name is the lookup key used by `--schema`, `config.yaml`, and [`.o
 | `name` | **Required.** A non-empty string stored as the schema name. Lookup still uses the directory name. |
 | `version` | **Required.** A positive integer stored as the schema revision. The value doesn't change OpenSpec's behavior. |
 | `description` | An optional string printed by `openspec schemas`. With no value, the schema has no description. |
+| `artifacts_dir` | **Init-time only.** A relative path (no absolute paths, no `..`) used as the default artifacts root by `openspec init` when creating a brand-new project. The default is `openspec` (changes/ and specs/ next to config.yaml); `spec-driven` sets `docs/openspec`. Never read at runtime — the project's `openspec/config.yaml` `artifacts_dir` key is what commands use. |
+| `config` | **Init-time only.** A block with `context` (a starter project-context string) and `rules` (per-artifact rule lists) that `openspec init` writes into a new project's `openspec/config.yaml`. Never read at runtime — like any schema metadata, only `openspec init` consumes it. |
 | `artifacts` | **Required.** A non-empty list of [artifact entries](#artifact-fields). |
 | `apply` | Optional [apply settings](#apply-fields). With no block, OpenSpec uses the [apply defaults](#apply-defaults). |
 
